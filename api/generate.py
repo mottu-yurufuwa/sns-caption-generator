@@ -212,11 +212,6 @@ class handler(BaseHTTPRequestHandler):
                 "tone": "シンプルで無駄のない表現で。短文で要点を的確に。絵文字も最小限でスッキリと。",
                 "style": "簡潔で洗練された表現",
                 "example_words": ["シンプル", "ミニマル", "本質", "純粋", "クリア"]
-            },
-            "レトロでノスタルジックな言葉で表現": {
-                "tone": "懐かしく温かみのある表現で。昔を思わせる言葉遣いや古風な表現を使用。絵文字は使わず、文学的で深みのある文章。",
-                "style": "レトロで郷愁を誘う表現",
-                "example_words": ["懐かしい", "郷愁", "古き良き", "追憶", "記憶", "温もり", "昔日", "思い出"]
             }
         }
         
@@ -320,8 +315,21 @@ Instagram用のキャプションを以下の形式で生成してください�
             temperature=0.8
         )
         
-        # レスポンスを解析（新しい形式）
+        # レスポンスを解析（コピペしやすい形式に修正）
         instagram_content = instagram_response.choices[0].message.content.strip()
+        
+        print(f"DEBUG: Raw AI response: {instagram_content[:200]}...")
+        
+        def clean_caption(text):
+            """キャプションからラベルを除去"""
+            # 日本語ラベルを除去
+            text = text.replace("日本語キャプション:", "")
+            text = text.replace("キャプション:", "")
+            text = text.replace("Caption:", "")
+            text = text.replace("English Caption:", "")
+            # 改行で始まる場合はトリム
+            text = text.strip()
+            return text
         
         if language == "japanese_english":
             # 日本語+英語の場合の解析
@@ -335,21 +343,27 @@ Instagram用のキャプションを以下の形式で生成してください�
                 jp_hashtags = []
                 if "ハッシュタグ（日本語）:" in japanese_part:
                     jp_sections = japanese_part.split("ハッシュタグ（日本語）:")
-                    jp_caption = jp_sections[0].replace("日本語キャプション:", "").strip()
+                    jp_caption = clean_caption(jp_sections[0])
                     jp_hashtags = jp_sections[1].strip().split()
+                else:
+                    jp_caption = clean_caption(japanese_part)
+                    jp_hashtags = []
                 
                 # 英語部分の解析
                 en_caption = ""
                 en_hashtags = []
                 if "Hashtags (English):" in english_part:
                     en_sections = english_part.split("Hashtags (English):")
-                    en_caption = en_sections[0].replace("English Caption:", "").strip()
+                    en_caption = clean_caption(en_sections[0])
                     en_hashtags = en_sections[1].strip().split()
+                else:
+                    en_caption = clean_caption(english_part)
+                    en_hashtags = []
                 
-                # 日本語と英語を結合
+                # 日本語と英語を結合（クリーンな形式）
                 combined_caption = jp_caption
                 if en_caption:
-                    combined_caption += "\n\n---\n\n" + en_caption
+                    combined_caption += "\n\n" + en_caption
                 
                 combined_hashtags = jp_hashtags + en_hashtags
                 
@@ -360,28 +374,31 @@ Instagram用のキャプションを以下の形式で生成してください�
             else:
                 # フォールバック
                 instagram_data = {
-                    "caption": instagram_content,
+                    "caption": clean_caption(instagram_content),
                     "hashtags": ["#photo", "#beautiful", "#instagram"]
                 }
         else:
             # 日本語のみ・英語のみの場合の解析
             if "ハッシュタグ:" in instagram_content:
                 sections = instagram_content.split("ハッシュタグ:")
-                caption = sections[0].replace("キャプション:", "").strip()
+                caption = clean_caption(sections[0])
                 hashtags = sections[1].strip().split()
             elif "Hashtags:" in instagram_content:
                 sections = instagram_content.split("Hashtags:")
-                caption = sections[0].replace("Caption:", "").strip()
+                caption = clean_caption(sections[0])
                 hashtags = sections[1].strip().split()
             else:
-                # フォールバック
-                caption = instagram_content
+                # フォールバック（ラベルを除去）
+                caption = clean_caption(instagram_content)
                 hashtags = ["#photo", "#beautiful"]
             
             instagram_data = {
                 "caption": caption,
                 "hashtags": hashtags[:10]  # 10個に制限
             }
+        
+        print(f"DEBUG: Final caption: {instagram_data.get('caption', '')[:100]}...")
+        print(f"DEBUG: Hashtags: {instagram_data.get('hashtags', [])}")
 
         # Twitter用スレッド生成
         caption_text = instagram_data.get('caption', '')
@@ -448,10 +465,16 @@ Instagram用のキャプションを以下の形式で生成してください�
                     if i == last_index:
                         twitter_data[i] = f"{twitter_data[i]} {hashtags_text}"
 
+        # Threads用のクリーンな形式
+        threads_text = instagram_data.get('caption', '')
+        threads_hashtags = instagram_data.get('hashtags', [])[:10]
+        if threads_hashtags:
+            threads_text += '\n\n' + ' '.join(threads_hashtags)
+        
         return {
             'instagram': instagram_data,
             'twitter': twitter_data,
-            'threads': instagram_data.get('caption', '') + '\n\n' + ' '.join(instagram_data.get('hashtags', [])[:10])
+            'threads': threads_text
         }
     
     def send_success_response(self, data):
