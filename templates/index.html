@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNS投稿文自動生成ツール</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📱 SNS投稿文自動生成ツール</h1>
+            <p>画像をアップロードして、Instagram・X（Twitter）・Threads用の投稿文を自動生成</p>
+        </header>
+
+        <main>
+            <form id="uploadForm" class="upload-form">
+                <div class="form-group">
+                    <label for="image">📸 画像を選択</label>
+                    <input type="file" id="image" name="image" accept="image/png,image/jpeg,image/jpg" required>
+                    <div class="file-info" id="fileInfo"></div>
+                    <div class="image-preview" id="imagePreview">
+                        <img id="previewImg" src="" alt="プレビュー画像">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="mood">✨ 投稿の雰囲気</label>
+                    <div class="mood-input-container">
+                        <select id="moodSelect" name="moodSelect">
+                            <option value="">-- プリセットから選択 --</option>
+                            <option value="カジュアル">カジュアル</option>
+                            <option value="ユーモラス">ユーモラス</option>
+                            <option value="詩的">詩的</option>
+                            <option value="クール">クール</option>
+                            <option value="エモーショナル">エモーショナル</option>
+                            <option value="プロフェッショナル">プロフェッショナル</option>
+                            <option value="フレンドリー">フレンドリー</option>
+                            <option value="ロマンチック">ロマンチック</option>
+                            <option value="アーティスティック">アーティスティック</option>
+                            <option value="ミニマル">ミニマル</option>
+                        </select>
+                        <div class="input-separator">または</div>
+                        <input type="text" id="customMood" name="customMood" placeholder="自由に雰囲気を入力（例：夏らしくて爽やか、レトロでノスタルジック）">
+                    </div>
+                    <div class="mood-help">💡 プリセットから選ぶか、お好みの雰囲気を自由に入力してください<br>※プリセットで生成すると英語が出ない可能性がございます。</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="languageOption">🌐 言語設定</label>
+                    <select id="languageOption" name="languageOption">
+                        <option value="japanese_only">日本語のみ</option>
+                        <option value="japanese_english" selected>日本語 + 英語翻訳</option>
+                        <option value="english_only">英語のみ</option>
+                    </select>
+                </div>
+
+                <button type="submit" id="generateBtn" class="generate-btn">
+                    🚀 投稿文を生成する
+                </button>
+            </form>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>AI が画像を分析中...</p>
+            </div>
+
+            <div id="error" class="error hidden"></div>
+
+            <div id="results" class="results hidden">
+                <h2>📝 生成結果</h2>
+                
+                <div class="image-analysis">
+                    <h3>🔍 画像分析結果</h3>
+                    <div class="content-box">
+                        <p id="imageDescription"></p>
+                    </div>
+                </div>
+
+                <div class="platform-results">
+                    <div class="platform-card">
+                        <div class="platform-header">
+                            <h3>📷 Instagram</h3>
+                        </div>
+                        <div class="content-box">
+                            <div class="caption-section">
+                                <h4>キャプション</h4>
+                                <div class="text-content" id="instagramCaption"></div>
+                                <button class="copy-btn" onclick="copyToClipboard('instagramCaption')">📋 コピー</button>
+                            </div>
+                            <div class="hashtags-section">
+                                <h4>ハッシュタグ</h4>
+                                <div class="hashtags" id="instagramHashtags"></div>
+                                <button class="copy-btn" onclick="copyHashtags('instagramHashtags')">📋 コピー</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="platform-card">
+                        <div class="platform-header">
+                            <h3>🐦 X (Twitter) スレッド</h3>
+                        </div>
+                        <div class="content-box">
+                            <div class="twitter-thread-container" id="twitterThreadContainer"></div>
+                            <button class="copy-btn" onclick="copyTwitterThread()">📋 全スレッドをコピー</button>
+                            <div class="thread-info" id="threadInfo"></div>
+                        </div>
+                    </div>
+
+                    <div class="platform-card">
+                        <div class="platform-header">
+                            <h3>🧵 Threads</h3>
+                        </div>
+                        <div class="content-box">
+                            <div class="platform-note">
+                                📝 Instagram用キャプションと同じ内容です
+                            </div>
+                            <div class="text-content" id="threadsContent"></div>
+                            <button class="copy-btn" onclick="copyToClipboard('threadsContent')">📋 コピー</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="reset-btn" onclick="resetForm()">🔄 新しい画像で再生成</button>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by OpenAI GPT-4o & Vision API</p>
+        </footer>
+    </div>
+
+    <div id="toast" class="toast hidden">
+        <span id="toastMessage"></span>
+    </div>
+
+    <script>
+        const uploadForm = document.getElementById('uploadForm');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const results = document.getElementById('results');
+        const fileInput = document.getElementById('image');
+        const fileInfo = document.getElementById('fileInfo');
+
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const fileSize = (file.size / 1024 / 1024).toFixed(2);
+                fileInfo.innerHTML = `<span class="file-name">${file.name}</span> <span class="file-size">(${fileSize}MB)</span>`;
+                
+                // 画像プレビュー表示
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewImg = document.getElementById('previewImg');
+                    const imagePreview = document.getElementById('imagePreview');
+                    previewImg.src = e.target.result;
+                    imagePreview.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const imageFile = document.getElementById('image').files[0];
+            const moodSelect = document.getElementById('moodSelect').value;
+            const customMood = document.getElementById('customMood').value.trim();
+            const mood = customMood || moodSelect || 'カジュアル';
+            const languageOption = document.getElementById('languageOption').value;
+
+            if (!imageFile) {
+                showError('画像を選択してください');
+                return;
+            }
+
+            formData.append('image', imageFile);
+            formData.append('mood', mood);
+            formData.append('language', languageOption);
+
+            showLoading();
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data);
+                } else {
+                    showError(data.error || '予期しないエラーが発生しました');
+                }
+            } catch (err) {
+                showError('通信エラーが発生しました');
+            } finally {
+                hideLoading();
+            }
+        });
+
+        function showLoading() {
+            loading.classList.remove('hidden');
+            error.classList.add('hidden');
+            results.classList.add('hidden');
+        }
+
+        function hideLoading() {
+            loading.classList.add('hidden');
+        }
+
+        function showError(message) {
+            error.textContent = message;
+            error.classList.remove('hidden');
+        }
+
+        function displayResults(data) {
+            document.getElementById('imageDescription').textContent = data.image_description;
+            document.getElementById('instagramCaption').textContent = data.captions.instagram.caption;
+            document.getElementById('threadsContent').textContent = data.captions.threads;
+
+            const hashtagsContainer = document.getElementById('instagramHashtags');
+            if (data.captions.instagram.hashtags) {
+                hashtagsContainer.innerHTML = data.captions.instagram.hashtags.map(tag => 
+                    `<span class="hashtag">${tag}</span>`
+                ).join(' ');
+            }
+
+            // Twitter スレッド表示
+            const twitterContainer = document.getElementById('twitterThreadContainer');
+            const threadInfo = document.getElementById('threadInfo');
+            
+            if (Array.isArray(data.captions.twitter)) {
+                twitterContainer.innerHTML = data.captions.twitter.map((tweet, index) => 
+                    `<div class="tweet-box">
+                        <div class="tweet-header">ツイート ${index + 1}</div>
+                        <div class="tweet-content">${tweet}</div>
+                        <div class="tweet-actions">
+                            <button class="copy-tweet-btn" onclick="copyToClipboard('tweet-${index}')" data-tweet="${tweet}">📋 コピー</button>
+                            <span class="tweet-char-count">${tweet.length}/140</span>
+                        </div>
+                        <div id="tweet-${index}" style="display: none;">${tweet}</div>
+                     </div>`
+                ).join('');
+                threadInfo.innerHTML = `📊 スレッド数: ${data.captions.twitter.length}個のツイート`;
+            } else {
+                // 後方互換性のため
+                twitterContainer.innerHTML = `
+                    <div class="tweet-box">
+                        <div class="tweet-header">ツイート 1</div>
+                        <div class="tweet-content">${data.captions.twitter}</div>
+                        <div class="tweet-actions">
+                            <button class="copy-tweet-btn" onclick="copyToClipboard('tweet-0')" data-tweet="${data.captions.twitter}">📋 コピー</button>
+                            <span class="tweet-char-count">${data.captions.twitter.length}/140</span>
+                        </div>
+                        <div id="tweet-0" style="display: none;">${data.captions.twitter}</div>
+                    </div>`;
+                threadInfo.innerHTML = `📊 スレッド数: 1個のツイート`;
+            }
+
+            results.classList.remove('hidden');
+        }
+
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('クリップボードにコピーしました！');
+            }).catch(() => {
+                showToast('コピーに失敗しました');
+            });
+        }
+
+        function copyHashtags(elementId) {
+            const element = document.getElementById(elementId);
+            const hashtags = Array.from(element.querySelectorAll('.hashtag')).map(tag => tag.textContent).join(' ');
+            
+            navigator.clipboard.writeText(hashtags).then(() => {
+                showToast('ハッシュタグをコピーしました！');
+            }).catch(() => {
+                showToast('コピーに失敗しました');
+            });
+        }
+
+        function copyTwitterThread() {
+            const twitterContainer = document.getElementById('twitterThreadContainer');
+            const tweets = Array.from(twitterContainer.querySelectorAll('.tweet-content')).map((tweet, index) => 
+                `${index + 1}/${twitterContainer.querySelectorAll('.tweet-content').length} ${tweet.textContent}`
+            ).join('\n\n');
+            
+            navigator.clipboard.writeText(tweets).then(() => {
+                showToast('Twitterスレッドをコピーしました！');
+            }).catch(() => {
+                showToast('コピーに失敗しました');
+            });
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toastMessage.textContent = message;
+            toast.classList.remove('hidden');
+            
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
+        function resetForm() {
+            uploadForm.reset();
+            fileInfo.innerHTML = '';
+            results.classList.add('hidden');
+            error.classList.add('hidden');
+            document.getElementById('customMood').value = '';
+            document.getElementById('imagePreview').classList.add('hidden');
+            document.getElementById('previewImg').src = '';
+        }
+    </script>
+</body>
+</html>
